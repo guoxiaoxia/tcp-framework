@@ -10,15 +10,15 @@ class EchoHandler {
     static onConnected(socket) {
     }
 
-    static onReceived(socket, incomingMessage, outgoingCallback/* = (outgoingMessage)*/) {
-        outgoingCallback(incomingMessage);
-    }
-
     static onClosed(socket) {
     }
 
     static onError(socket, err) {
-        console.log("got error " + err.stack);
+        console.log(err.stack);
+    }
+
+    static async process(socket, incomingMessage) {
+        return incomingMessage;
     }
 }
 

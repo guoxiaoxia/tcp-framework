@@ -5,9 +5,8 @@ module.exports = class extends TcpClient {
         super({port: 8212});
     }
 
-    send(request, responseCallback, errorCallback) {
-        super.send(Buffer.from(request), (incomingMessage) => {
-            responseCallback(incomingMessage.toString('utf8'));
-        }, errorCallback);
+    async send(request) {
+        let incomingMessage = await super.send(Buffer.from(request));
+        return incomingMessage.toString('utf8');
     }
 };

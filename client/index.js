@@ -26,20 +26,22 @@ module.exports = class Client {
 		this._connect();
 	}
 
-	send(outgoingPayload, successCallback/* = (incomingPayload) */, failureCallback/* = (err) */) {
+	async send(outgoingPayload) {
 		let outgoingMessage = new Message(Message.SIGN_DATA, outgoingPayload);
-		let task = new Task(outgoingMessage, successCallback, failureCallback);
-		this._tasks.set(outgoingMessage.uuid, task);
-		if (this._status === STATUS_CONNECTED) {
-			this._socket.write(outgoingMessage.toBuffer());
-		}
-		setTimeout(() => {
-			let task = this._tasks.get(outgoingMessage.uuid);
-			if (task instanceof Task) {
-				this._tasks.delete(outgoingMessage.uuid);
-				task.failureCallback(new Error('request timeout'));
+		return new Promise((resolve, reject) => {
+			let task = new Task(outgoingMessage, incomingPayload => resolve(incomingPayload), error => reject(error));
+			this._tasks.set(outgoingMessage.uuid, task);
+			if (this._status === STATUS_CONNECTED) {
+				this._socket.write(outgoingMessage.toBuffer());
 			}
-		}, this._options.timeout * 1000);
+			setTimeout(() => {
+				let task = this._tasks.get(outgoingMessage.uuid);
+				if (task instanceof Task) {
+					this._tasks.delete(outgoingMessage.uuid);
+				}
+				reject(new Error('request timeout'));
+			}, this._options.timeout * 1000);
+		});
 	}
 
 	_connect() {

@@ -10,28 +10,22 @@ describe('#echoWithDelayedStartup', function() {
 	it('should return [hello, world]', testEchoWithDelayedStartup);
 });
 
-function testEcho() {
+async function testEcho() {
 	let server = new EchoServer();
 	server.start();
 
 	let client = new EchoClient();
-	return client.send('hello, world', (response) => {
-		assert(response === 'hello, world');
-	}, (err) => {
-		assert(false, "got an error");
-	});
+	let response = await client.send('hello, world');
+	assert(response === 'hello, world');
 }
 
-function testEchoWithDelayedStartup() {
+async function testEchoWithDelayedStartup() {
 	setTimeout(() => {
 		let server = new EchoServer();
 		server.start();
 	}, 2000);
 
 	let client = new EchoClient();
-	return client.send('hello, world', (response) => {
-		assert(response === 'hello, world');
-	}, (err) => {
-		assert(false, "got an error");
-	});
+	let response = await client.send('hello, world');
+	assert(response === 'hello, world');
 }

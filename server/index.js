@@ -3,7 +3,7 @@ const assert = require('assert');
 
 /*============template of Handler===========*/
 /*
-class Handler {
+class EchoHandler {
     static onStarted(server) {
     }
 
@@ -13,16 +13,15 @@ class Handler {
     static onConnected(socket) {
     }
 
-    static onReceived(socket, incomingMessage, outgoingCallback = (outgoingMessage)) {
-    }
-
     static onClosed(socket) {
     }
 
-    static onError(socket, error) {
-        
+    static onError(socket, err) {
     }
-};
+    
+    static async process(socket, incomingMessage) {
+    }
+}
 */
 
 module.exports = class Server {
@@ -30,9 +29,9 @@ module.exports = class Server {
 		assert(typeof handler.onStarted === 'function', 'onStarted function is missing in handler');
 		assert(typeof handler.onStopped === 'function', 'onStopped function is missing in handler');
 		assert(typeof handler.onConnected === 'function', 'onConnected function is missing in handler');
-		assert(typeof handler.onReceived === 'function', 'onReceived function is missing in handler');
 		assert(typeof handler.onClosed === 'function', 'onClosed function is missing in handler');
 		assert(typeof handler.onError === 'function', 'onError function is missing in handler');
+		assert(typeof handler.process === 'function', 'process function is missing in handler');
 		
 		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
 		if (options.host === undefined) {
@@ -101,7 +100,7 @@ module.exports = class Server {
 		this._handler.onConnected(socket);
 	}
 
-	onReceived(socket, incomingBuffer) {
+	async onReceived(socket, incomingBuffer) {
 		this._socketMap.set(socket, this._now);
 		socket.buffer = Buffer.concat([socket.buffer, incomingBuffer]);
 
@@ -115,14 +114,10 @@ module.exports = class Server {
 
 				switch(incomingMessage.sign) {
 					case Message.SIGN_PING:
-						let outgoingMessage = new Message(Message.SIGN_PING);
-						socket.write(outgoingMessage.toBuffer());
+						socket.write(new Message(Message.SIGN_PING).toBuffer());
 						break;
 					case Message.SIGN_DATA:
-						this._handler.onReceived(socket, incomingMessage.payload, (outgoingPayload) => {
-							let outgoingMessage = new Message(Message.SIGN_DATA, outgoingPayload, incomingMessage.uuid);
-							socket.write(outgoingMessage.toBuffer());
-						});
+						socket.write(new Message(Message.SIGN_DATA, await this._handler.process(socket, incomingMessage.payload), incomingMessage.uuid).toBuffer());
 						break;
 					default:
 						break;
