@@ -2,26 +2,28 @@ const TcpServer = require('../../server');
 
 class EchoHandler {
     static onStarted(server) {
-        console.log("server started");
     }
 
     static onStopped(server) {
-        console.log("server stopped");
     }
 
     static onConnected(socket) {
-        console.log("socket connected");
     }
 
     static onReceived(socket, incomingMessage, outgoingCallback/* = (outgoingMessage)*/) {
-        console.log("socket received");
         outgoingCallback(incomingMessage);
     }
 
     static onClosed(socket) {
-        console.log("socket closed");
+    }
+
+    static onError(socket, err) {
+        console.log("got error " + err.stack);
     }
 }
 
-let server = new TcpServer(EchoHandler, {port: 8211});
-server.start();
+module.exports = class extends TcpServer {
+    constructor() {
+        super(EchoHandler, {port:8212});
+    }
+}

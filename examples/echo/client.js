@@ -1,8 +1,13 @@
 const TcpClient = require('../../client');
 
-let client = new TcpClient({port:8211});
-client.send(Buffer.from("hey yo"), (incomingMessage) => {
-    console.log(incomingMessage.toString('utf8'));
-}, (err) => {
-    console.error(err);
-});
+module.exports = class extends TcpClient {
+    constructor() {
+        super({port: 8212});
+    }
+
+    send(request, responseCallback, errorCallback) {
+        super.send(Buffer.from(request), (incomingMessage) => {
+            responseCallback(incomingMessage.toString('utf8'));
+        }, errorCallback);
+    }
+};

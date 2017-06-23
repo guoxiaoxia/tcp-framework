@@ -2,8 +2,6 @@ const net = require('net');
 const Message = require('../message');
 const Task = require('./task');
 const Doctor = require('./doctor');
-const Ajv = require('ajv');
-const ajv = new Ajv();
 const assert = require('assert');
 
 const STATUS_DISCONNECTED = 0;
@@ -11,25 +9,15 @@ const STATUS_CONNECTING = 1;
 const STATUS_CONNECTED = 2;
 
 module.exports = class Client {
-	constructor(opt) {
-		if (!ajv.validate({
-			type: "object",
-			properties: {
-				host: {type: "string"},
-				port: {type: "integer"},
-				timeout: {type: "integer"}
-			},
-			additionalProperties: false,
-			required: ["port"]
-		}, opt)) {
-			throw new Error('bad opt');
+	constructor(options) {
+		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
+		if (options.host === undefined) {
+			options.host = 'localhost';
 		}
-
-		this._config = {
-			host:opt.host ? opt.host : 'localhost', 
-			port:opt.port,
-			timeout:opt.timeout ? opt.timeout : 30
-		};
+		if (!Number.isInteger(options.timeout)) {
+			options.timeout = 3;
+		}
+		this._options = options;
 
 		this._tasks = new Map();
 		this._doctor = new Doctor(this);
@@ -51,12 +39,12 @@ module.exports = class Client {
 				this._tasks.delete(outgoingMessage.uuid);
 				task.failureCallback(new Error('request timeout'));
 			}
-		}, this._config.timeout * 1000);
+		}, this._options.timeout * 1000);
 	}
 
 	_connect() {
 		this._status = STATUS_CONNECTING;
-		this._socket = net.createConnection(this._config.port, this._config.host, () => {
+		this._socket = net.createConnection(this._options.port, this._options.host, () => {
 			this._status = STATUS_CONNECTED;
 			this._doctor.start(this._socket);
 			for (let [uuid, task] of this._tasks) {
@@ -77,7 +65,6 @@ module.exports = class Client {
 	}
 
 	_close(hasError) {
-		console.log(new Error().stack);
 		if (hasError) {
 			this._socket.destroy();
 		}

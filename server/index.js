@@ -1,56 +1,87 @@
 const Message = require('../message');
 const assert = require('assert');
 
+/*============template of Handler===========*/
+/*
+class Handler {
+    static onStarted(server) {
+    }
+
+    static onStopped(server) {
+    }
+
+    static onConnected(socket) {
+    }
+
+    static onReceived(socket, incomingMessage, outgoingCallback = (outgoingMessage)) {
+    }
+
+    static onClosed(socket) {
+    }
+
+    static onError(socket, error) {
+        
+    }
+};
+*/
+
 module.exports = class Server {
-	constructor(handler, config = undefined) {
-		assert(typeof handler.onStart === 'function', 'onStart function is missing in handler');
-		assert(typeof handler.onStop === 'function', 'onStop function is missing in handler');
+	constructor(handler, options) {
+		assert(typeof handler.onStarted === 'function', 'onStarted function is missing in handler');
+		assert(typeof handler.onStopped === 'function', 'onStopped function is missing in handler');
 		assert(typeof handler.onConnected === 'function', 'onConnected function is missing in handler');
 		assert(typeof handler.onReceived === 'function', 'onReceived function is missing in handler');
 		assert(typeof handler.onClosed === 'function', 'onClosed function is missing in handler');
+		assert(typeof handler.onError === 'function', 'onError function is missing in handler');
+		
+		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
+		if (options.host === undefined) {
+			options.host = '0.0.0.0';
+		}
+		if (!Number.isInteger(options.timeout)) {
+			options.timeout = 3;
+		}
+		this._options = options;
 
-		this._config = require('./config').parse(config);
 		this._handler = handler;
 		this._socketMap = new Map();
-		this._server = null;
+		this._server = undefined;
 		this._now = new Date().getTime();
 	}
 
-	get config() { return this._config; }
-
 	start() {
 		this._server = require('net').createServer(socket => this.onConnected(socket));
-		this._server.listen(this._config.port, this._config.host);
+		this._server.listen(this._options.port, this._options.host);
 
 		this._checkupTimer = setInterval(() => {
 			this._now = new Date().getTime();
 			for (let [socket, lastActiveTime] of this._socketMap) {
-				if ((lastActiveTime + this._config.timeout * 1000) < this._now) {
-					socket.end();
+				if ((lastActiveTime + this._options.timeout * 1000) < this._now) {
+					socket.destroy(new Error(`timeout(idle for over ${this._options.timeout} seconds`));
 				}
 			}
 		}, 1000);
 
-		if (this._config.duration !== null) {
+		if (Number.isInteger(this._options.duration)) {
 			setTimeout(() => {
 				this.stop();
-			}, this._config.duration * 1000);
+			}, this._options.duration * 1000);
 		}
 
-		this._handler.onStart(this);
+		this._handler.onStarted(this);
 	}
 
 	stop() {
-		if (this._server === null) {
+		if (this._server === undefined) {
 			return;
 		}
 		this._server.close();
-		this._server = null;
+		this._server = undefined;
 		if (this._checkupTimer) {
 			clearInterval(this._checkupTimer);
 			this._checkupTimer = undefined;
 		}
-		this._handler.onStop(this);
+		this._handler.onStopped(this);
 		process.exit(0);
 	}
 
@@ -59,16 +90,19 @@ module.exports = class Server {
 		socket.on('data', (incomingBuffer) => {
 			this.onReceived(socket, incomingBuffer);
 		});
-		socket.on('error', err => {});
-		socket.on('close', (hasError) => {
-			this.onClosed(socket, {hasError})
+		socket.on('error', error => {
+			this._handler.onError(socket, error);
+		});
+		socket.on('close', _ => {
+			this._socketMap.delete(socket);
+			this._handler.onClosed(socket);
 		});
 		this._socketMap.set(socket, this._now);
 		this._handler.onConnected(socket);
 	}
 
 	onReceived(socket, incomingBuffer) {
-		this._socketMap[socket] = this._now;
+		this._socketMap.set(socket, this._now);
 		socket.buffer = Buffer.concat([socket.buffer, incomingBuffer]);
 
 		try {
@@ -86,7 +120,7 @@ module.exports = class Server {
 						break;
 					case Message.SIGN_DATA:
 						this._handler.onReceived(socket, incomingMessage.payload, (outgoingPayload) => {
-							let outgoingMessage = new Message(Message.SIGN_DATA, encodedOutgoingPayload, incomingMessage.uuid);
+							let outgoingMessage = new Message(Message.SIGN_DATA, outgoingPayload, incomingMessage.uuid);
 							socket.write(outgoingMessage.toBuffer());
 						});
 						break;
@@ -95,13 +129,8 @@ module.exports = class Server {
 				}	
 			}
 		}
-		catch(err) {
-			socket.end();
+		catch(error) {
+			socket.destroy(error);
 		}
-	}
-
-	onClosed(socket, {hasError}) {
-		delete this._socketMap[socket];
-		this._handler.onClosed(socket);
 	}
 }
