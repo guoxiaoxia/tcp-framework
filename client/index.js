@@ -9,7 +9,7 @@ const STATUS_CONNECTING = 1;
 const STATUS_CONNECTED = 2;
 
 module.exports = class Client {
-	constructor(options) {
+	constructor(options, handler = undefined) {
 		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
 		if (options.host === undefined) {
 			options.host = 'localhost';
@@ -23,6 +23,7 @@ module.exports = class Client {
 		this._doctor = new Doctor(this);
 		this._status = STATUS_DISCONNECTED;
 		this._buffer = Buffer.alloc(0);
+		this._handler = handler;
 		this._connect();
 	}
 
@@ -52,6 +53,9 @@ module.exports = class Client {
 			for (let [uuid, task] of this._tasks) {
 				this._socket.write(task.message.toBuffer());
 			}
+			if (this._handler !== undefined) {
+				this._handler.onConnected();
+			}
 		});
 		this._socket.on('data', (incomingBuffer) => {
 			this._buffer = Buffer.concat([this._buffer, incomingBuffer]);
@@ -59,7 +63,9 @@ module.exports = class Client {
 			this._process();
 		});
 		this._socket.on('error', (err) => {
-			console.log(err);
+			if (this._handler !== undefined) {
+				this._handler.onError(err);
+			}
 		});
 		this._socket.on('close', (hasError) => {
 			this._close(hasError);
@@ -74,6 +80,9 @@ module.exports = class Client {
 			this._socket.end();
 		}
 		this._status = STATUS_DISCONNECTED;
+		if (this._handler !== undefined) {
+			this._handler.onClosed();
+		}
 
 		setTimeout(() => {
 			if (this._status !== STATUS_DISCONNECTED) {
