@@ -45,8 +45,8 @@ module.exports = class Server {
 		this._checkupTimer = setInterval(() => {
 			this._now = new Date().getTime();
 			for (let [socket, lastActiveTime] of this._socketMap) {
-				if ((lastActiveTime + this._options.timeout * 1000) < this._now) {
-					socket.destroy(new Error(`timeout(idle for over ${this._options.timeout} seconds`));
+				if ((lastActiveTime + 30 * 1000) < this._now) {
+					socket.destroy(new Error(`timeout(idle for over 30 seconds`));
 				}
 			}
 		}, 1000);
