@@ -1,29 +1,31 @@
 const TcpServer = require('../../server');
 
-class EchoHandler {
-    static onStarted(server) {
-    }
-
-    static onStopped(server) {
-    }
-
-    static onConnected(socket) {
-    }
-
-    static onClosed(socket) {
-    }
-
-    static onError(socket, err) {
-        console.log(err.stack);
-    }
-
-    static async process(socket, incomingMessage) {
-        return incomingMessage;
-    }
-}
-
 module.exports = class extends TcpServer {
     constructor() {
-        super(EchoHandler, {port:8212});
+        super({port:8212});
+    }
+
+    onStarted() {
+        console.log("onStarted");
+    }
+
+    onStopped() {
+        console.log("onStopped");
+    }
+
+    onConnected(socket) {
+        console.log(`onConnected from ${socket.remoteAddress}:${socket.remotePort}`);
+    }
+
+    onClosed(socket) {
+        console.log(`onClosed from ${socket.remoteAddress}:${stocket.remotePort}`);
+    }
+
+    onError(socket, err) {
+        console.error(err.stack);
+    }
+
+    async process(socket, incomingMessage) {
+        return incomingMessage;
     }
 }

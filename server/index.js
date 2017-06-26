@@ -1,38 +1,30 @@
 const Message = require('../message');
 const assert = require('assert');
 
-/*============template of Handler===========*/
+/*============Functions that mean to be overwritten===========*/
 /*
-class EchoHandler {
-    static onStarted(server) {
+    onStarted() {
     }
 
-    static onStopped(server) {
+    onStopped() {
     }
 
-    static onConnected(socket) {
+    onConnected(socket) {
     }
 
-    static onClosed(socket) {
+    onClosed(socket) {
     }
 
-    static onError(socket, err) {
+    onError(socket, err) {
     }
     
-    static async process(socket, incomingMessage) {
+    async process(socket, incomingMessage) {
     }
 }
 */
 
 module.exports = class Server {
-	constructor(handler, options) {
-		assert(typeof handler.onStarted === 'function', 'onStarted function is missing in handler');
-		assert(typeof handler.onStopped === 'function', 'onStopped function is missing in handler');
-		assert(typeof handler.onConnected === 'function', 'onConnected function is missing in handler');
-		assert(typeof handler.onClosed === 'function', 'onClosed function is missing in handler');
-		assert(typeof handler.onError === 'function', 'onError function is missing in handler');
-		assert(typeof handler.process === 'function', 'process function is missing in handler');
-		
+	constructor(options) {		
 		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
 		if (options.host === undefined) {
 			options.host = '0.0.0.0';
@@ -41,15 +33,13 @@ module.exports = class Server {
 			options.timeout = 3;
 		}
 		this._options = options;
-
-		this._handler = handler;
 		this._socketMap = new Map();
 		this._server = undefined;
 		this._now = new Date().getTime();
 	}
 
 	start() {
-		this._server = require('net').createServer(socket => this.onConnected(socket));
+		this._server = require('net').createServer(socket => this.accept(socket));
 		this._server.listen(this._options.port, this._options.host);
 
 		this._checkupTimer = setInterval(() => {
@@ -67,7 +57,9 @@ module.exports = class Server {
 			}, this._options.duration * 1000);
 		}
 
-		this._handler.onStarted(this);
+		if (typeof this.onStarted === 'function') {
+			this.onStarted();
+		}
 	}
 
 	stop() {
@@ -80,30 +72,37 @@ module.exports = class Server {
 			clearInterval(this._checkupTimer);
 			this._checkupTimer = undefined;
 		}
-		this._handler.onStopped(this);
+		if (typeof this.onStopped === 'function') {
+			this.onStopped();
+		}
 		process.exit(0);
 	}
 
-	onConnected(socket) {
+	accept(socket) {
 		socket.buffer = Buffer.alloc(0);
 		socket.on('data', (incomingBuffer) => {
-			this.onReceived(socket, incomingBuffer);
+			this._read(socket, incomingBuffer);
 		});
 		socket.on('error', error => {
-			this._handler.onError(socket, error);
+			if (typeof this.onError === 'function') {
+				this.onError(socket, error);
+			}
 		});
 		socket.on('close', _ => {
 			this._socketMap.delete(socket);
-			this._handler.onClosed(socket);
+			if (typeof this.onClosed === 'function') {
+				this.onClosed(socket);
+			}
 		});
 		this._socketMap.set(socket, this._now);
-		this._handler.onConnected(socket);
+		if (typeof this.onConnected === 'function') {
+			this.onConnected(socket);
+		}
 	}
 
-	async onReceived(socket, incomingBuffer) {
+	async _read(socket, incomingBuffer) {
 		this._socketMap.set(socket, this._now);
 		socket.buffer = Buffer.concat([socket.buffer, incomingBuffer]);
-
 		try {
 			while(true) {
 				let {consumed, message:incomingMessage} = Message.parse(socket.buffer);
@@ -117,7 +116,9 @@ module.exports = class Server {
 						socket.write(new Message(Message.SIGN_PING).toBuffer());
 						break;
 					case Message.SIGN_DATA:
-						socket.write(new Message(Message.SIGN_DATA, await this._handler.process(socket, incomingMessage.payload), incomingMessage.uuid).toBuffer());
+						if (typeof this.process === 'function') {
+							socket.write(new Message(Message.SIGN_DATA, await this.process(socket, incomingMessage.payload), incomingMessage.uuid).toBuffer());
+						}
 						break;
 					default:
 						break;
