@@ -1,6 +1,5 @@
 const net = require('net');
 const Message = require('../message');
-const Task = require('./task');
 const Doctor = require('./doctor');
 const assert = require('assert');
 
@@ -45,16 +44,16 @@ module.exports = class Client {
 	async send(outgoingPayload) {
 		let outgoingMessage = new Message(Message.SIGN_DATA, outgoingPayload);
 		return new Promise((resolve, reject) => {
-			let task = new Task(outgoingMessage, incomingPayload => resolve(incomingPayload), error => reject(error));
-			this._tasks.set(outgoingMessage.uuid, task);
+			this._tasks.set(outgoingMessage.uuid, {
+				message: outgoingMessage,
+				successCallback: incomingPayload => resolve(incomingPayload),
+				failureCallback: error => reject(error)
+			});
 			if (this._status === STATUS_CONNECTED) {
 				this._socket.write(outgoingMessage.toBuffer());
 			}
 			setTimeout(() => {
-				let task = this._tasks.get(outgoingMessage.uuid);
-				if (task instanceof Task) {
-					this._tasks.delete(outgoingMessage.uuid);
-				}
+				this._tasks.delete(outgoingMessage.uuid);
 				reject(new Error('request timeout'));
 			}, this._options.timeout * 1000);
 		});
@@ -117,7 +116,7 @@ module.exports = class Client {
 			this._buffer = this._buffer.slice(consumed);
 			if (incomingMessage.sign === Message.SIGN_DATA) {
 				let task = this._tasks.get(incomingMessage.uuid);
-				if (task instanceof Task) {
+				if (task !== undefined) {
 					task.successCallback(incomingMessage.payload);
 					this._tasks.delete(incomingMessage.uuid);
 				}
