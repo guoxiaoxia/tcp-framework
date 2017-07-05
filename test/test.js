@@ -11,6 +11,6 @@ async function testEcho() {
 	server.start();
 
 	let client = new EchoClient();
-	let response = await client.send('hello, world');
+	let response = await client.request('hello, world');
 	assert(response === 'hello, world');
 }

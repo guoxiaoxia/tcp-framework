@@ -18,12 +18,12 @@ const assert = require('assert');
     onError(socket, err) {
     }
     
-    async process(socket, incomingMessage) {
+    onMessage(socket, incomingMessage) {
     }
 }
 */
 
-module.exports = class Server {
+module.exports = class {
 	constructor(options) {		
 		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
 		if (options.host === undefined) {
@@ -39,7 +39,7 @@ module.exports = class Server {
 	}
 
 	start() {
-		this._server = require('net').createServer(socket => this.accept(socket));
+		this._server = require('net').createServer(socket => this._accept(socket));
 		this._server.listen(this._options.port, this._options.host);
 
 		this._checkupTimer = setInterval(() => {
@@ -78,10 +78,20 @@ module.exports = class Server {
 		process.exit(0);
 	}
 
-	accept(socket) {
+	send(socket, outgoingMessage) {
+		try {
+			socket.write(outgoingMessage.toBuffer());
+		}
+		catch(err) {
+			socket.destroy(error);
+		}
+	}
+
+	_accept(socket) {
 		socket.buffer = Buffer.alloc(0);
 		socket.on('data', (incomingBuffer) => {
-			this._read(socket, incomingBuffer);
+			socket.buffer = Buffer.concat([socket.buffer, incomingBuffer]);
+			this._process(socket);
 		});
 		socket.on('error', error => {
 			if (typeof this.onError === 'function') {
@@ -100,9 +110,8 @@ module.exports = class Server {
 		}
 	}
 
-	async _read(socket, incomingBuffer) {
+	_process(socket) {
 		this._socketMap.set(socket, this._now);
-		socket.buffer = Buffer.concat([socket.buffer, incomingBuffer]);
 		try {
 			while(true) {
 				let {consumed, message:incomingMessage} = Message.parse(socket.buffer);
@@ -111,18 +120,11 @@ module.exports = class Server {
 				}
 				socket.buffer = socket.buffer.slice(consumed);
 
-				switch(incomingMessage.sign) {
-					case Message.SIGN_PING:
-						socket.write(new Message(Message.SIGN_PING).toBuffer());
-						break;
-					case Message.SIGN_DATA:
-						if (typeof this.process === 'function') {
-							socket.write(new Message(Message.SIGN_DATA, await this.process(socket, incomingMessage.payload), incomingMessage.uuid).toBuffer());
-						}
-						break;
-					default:
-						break;
-				}	
+				if (incomingMessage.sign === Message.SIGN_DATA) {
+					if (typeof this.onMessage === 'function') {
+						this.onMessage(socket, incomingMessage);
+					}
+				}
 			}
 		}
 		catch(error) {

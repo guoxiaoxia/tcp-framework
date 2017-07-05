@@ -1,6 +1,5 @@
 const net = require('net');
 const Message = require('../message');
-const Doctor = require('./doctor');
 const assert = require('assert');
 
 const STATUS_DISCONNECTED = 0;
@@ -9,21 +8,21 @@ const STATUS_CONNECTED = 2;
 
 /*============Functions that mean to be overwritten===========*/
 /*
-    onConnected(socket) {
+    onConnected() {
     }
 
-    onClosed(socket) {
+    onClosed() {
     }
 
-    onError(socket, err) {
+    onError(err) {
     }
     
-    async send(outgoingPayload) {
+	onMessage(incomingMessage) {
     }
 }
 */
 
-module.exports = class Client {
+module.exports = class {
 	constructor(options) {
 		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
 		if (options.host === undefined) {
@@ -33,30 +32,23 @@ module.exports = class Client {
 			options.timeout = 3;
 		}
 		this._options = options;
-
-		this._tasks = new Map();
-		this._doctor = new Doctor(this);
+		this._pendingMessages = new Map();
 		this._status = STATUS_DISCONNECTED;
 		this._buffer = Buffer.alloc(0);
 		this._connect();
+		setInterval(() => {
+			if (this._status === STATUS_CONNECTED) {
+				this._socket.write(new Message(Message.SIGN_PING).toBuffer());
+			}
+		}, 25 * 1000);
 	}
 
-	async send(outgoingPayload) {
-		let outgoingMessage = new Message(Message.SIGN_DATA, outgoingPayload);
-		return new Promise((resolve, reject) => {
-			this._tasks.set(outgoingMessage.uuid, {
-				message: outgoingMessage,
-				successCallback: incomingPayload => resolve(incomingPayload),
-				failureCallback: error => reject(error)
-			});
-			if (this._status === STATUS_CONNECTED) {
-				this._socket.write(outgoingMessage.toBuffer());
-			}
-			setTimeout(() => {
-				this._tasks.delete(outgoingMessage.uuid);
-				reject(new Error('request timeout'));
-			}, this._options.timeout * 1000);
-		});
+	send(outgoingMessage) {
+		if (this._status === STATUS_CONNECTED) {
+			this._socket.write(outgoingMessage.toBuffer());
+			return;
+		}
+		this._pendingMessages.set(outgoingMessage.uuid, outgoingMessage);
 	}
 
 	_connect() {
@@ -66,14 +58,13 @@ module.exports = class Client {
 				this.onConnected();
 			}
 			this._status = STATUS_CONNECTED;
-			this._doctor.start(this._socket);
-			for (let [uuid, task] of this._tasks) {
-				this._socket.write(task.message.toBuffer());
+			for (let [uuid, outgoingMessage] of this._pendingMessages) {
+				this._socket.write(outgoingMessage.toBuffer());
 			}
+			this._pendingMessages.clear();
 		});
 		this._socket.on('data', (incomingBuffer) => {
 			this._buffer = Buffer.concat([this._buffer, incomingBuffer]);
-			this._doctor.yelp();
 			this._process();
 		});
 		this._socket.on('error', (err) => {
@@ -107,20 +98,23 @@ module.exports = class Client {
 	}
 
 	_process() {
-		while(true) {
-			let {consumed, message:incomingMessage} = Message.parse(this._buffer);
-			if (consumed === 0) {
-				break;
-			}
+		try {
+			while(true) {
+				let {consumed, message:incomingMessage} = Message.parse(this._buffer);
+				if (consumed === 0) {
+					break;
+				}
+				this._buffer = this._buffer.slice(consumed);
 
-			this._buffer = this._buffer.slice(consumed);
-			if (incomingMessage.sign === Message.SIGN_DATA) {
-				let task = this._tasks.get(incomingMessage.uuid);
-				if (task !== undefined) {
-					task.successCallback(incomingMessage.payload);
-					this._tasks.delete(incomingMessage.uuid);
+				if (incomingMessage.sign === Message.SIGN_DATA) {
+					if (typeof this.onMessage === 'function') {
+						this.onMessage(incomingMessage);
+					}
 				}
 			}
+		}
+		catch(error) {
+			this._socket.destroy(error);
 		}
 	}
 }

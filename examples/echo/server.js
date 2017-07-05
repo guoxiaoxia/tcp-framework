@@ -25,7 +25,7 @@ module.exports = class extends TcpServer {
         console.error(err.stack);
     }
 
-    async process(socket, incomingMessage) {
-        return incomingMessage;
+    onMessage(socket, incomingMessage) {
+        this.send(socket, incomingMessage);
     }
 }
