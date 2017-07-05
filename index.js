@@ -3,6 +3,10 @@ module.exports = class {
 		return require('./server');
 	}
 	
+	static get Message() {
+		return require('./message');
+	}
+
 	static get Client() {
 		return require('./client');
 	}
