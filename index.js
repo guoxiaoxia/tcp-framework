@@ -2,12 +2,12 @@ module.exports = class {
 	static get Server() {
 		return require('./server');
 	}
-	
-	static get Message() {
-		return require('./message');
+
+	static get InstantClient() {
+		return require('./client/instant.js');
 	}
 
-	static get Client() {
-		return require('./client');
-	}
-}
+    static get PersistentClient() {
+        return require('./client/persistent.js');
+    }
+};

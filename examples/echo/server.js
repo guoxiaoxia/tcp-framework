@@ -18,7 +18,7 @@ module.exports = class extends TcpServer {
     }
 
     onClosed(socket) {
-        console.log(`onClosed from ${socket.remoteAddress}:${stocket.remotePort}`);
+        console.log(`onClosed from ${socket.remoteAddress}:${socket.remotePort}`);
     }
 
     onError(socket, err) {
@@ -28,4 +28,4 @@ module.exports = class extends TcpServer {
     onMessage(socket, incomingMessage) {
         this.send(socket, incomingMessage);
     }
-}
+};

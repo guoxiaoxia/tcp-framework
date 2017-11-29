@@ -101,7 +101,8 @@ module.exports = class {
 		socket.on('close', _ => {
 			this._socketMap.delete(socket);
 			if (typeof this.onClosed === 'function') {
-				this.onClosed(socket);
+				let a = socket;
+				this.onClosed(a);
 			}
 		});
 		this._socketMap.set(socket, this._now);
