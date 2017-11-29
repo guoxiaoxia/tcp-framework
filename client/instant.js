@@ -2,67 +2,75 @@ const net = require('net');
 const Message = require('../message');
 const assert = require('assert');
 
-/*============Functions that mean to be overwritten===========*/
-/*
-    onError(err) {}
-*/
-
 module.exports = class {
 	constructor(options) {
 		assert(Number.isInteger(options.port), 'options.port is not correctly configured');
         options.host = options.hasOwnProperty('host') ? options.host : options.host = 'localhost';
         options.timeout = Number.isInteger(options.timeout) ? options.timeout : 3;
-
 		this._options = options;
+
+        this._buffer = Buffer.alloc(0);
+        this._callback = undefined;
+		this._isDataComplete = false;
 	}
 
-	request(request) {
-	    let outgoingMessage = new Message(Message.SIGN_DATA, Buffer.from(request));
+    request(payload) {
+        let outgoingMessage = new Message(Message.SIGN_DATA, payload);
         return new Promise((resolve, reject) => {
-            let isDataComplete = false;
-            this._socket = net.createConnection(this._options.port, this._options.host, () => {
-                console.log('client connected event');
+            this._callback = {
+                success: (response) => resolve(response),
+                failure: error => reject(error)
+            };
 
-                this._socket.write(outgoingMessage.toBuffer());
-
-                setTimeout(() => {
-                    if (!isDataComplete) {
-                        throw new Error('request timeout')
-                    }
-                }, this._options.timeout * 1000);
-            });
-
-            let _buffer = Buffer.alloc(0);
-            this._socket.on('data', async (incomingBuffer) => {
-                console.log('client data event');
-
-                try {
-                    _buffer = Buffer.concat([_buffer, incomingBuffer]);
-                    let {consumed, message:incomingMessage} = Message.parse(_buffer);
-                    if (consumed !== 0) {
-                        this._socket.end();
-                        isDataComplete = true;
-                        _buffer = _buffer.slice(consumed);
-
-                        if (incomingMessage.sign !== Message.SIGN_DATA) {
-                            reject(`message sign wrong`);
-                        }
-                        resolve(incomingMessage.payload.toString('utf8'));
-                    }
-                }
-                catch(error) {
-                    this._socket.destroy(error);
-                }
-			});
-
-            this._socket.on('error', (err) => {
-                console.log('client error event');
-
-                if (typeof this.onError === 'function') {
-                    this.onError(err);
-                }
-                reject(err);
-            });
+            this._connect();
+            this._send(outgoingMessage);
         });
-	}
+    }
+
+	_connect() {
+        this._socket = net.createConnection(this._options.port, this._options.host, () => {
+            console.log('client connected event');
+        });
+
+        this._socket.on('data', async (incomingBuffer) => {
+            console.log('client data event');
+
+            this._process(incomingBuffer);
+        });
+
+        this._socket.on('error', (err) => {
+            console.log('client error event');
+            this._callback.failure(err);
+        });
+    }
+
+    _send(outgoingMessage) {
+        setTimeout(() => {
+            if (!this._isDataComplete) {
+                this._callback.failure('request timeout');
+            }
+        }, this._options.timeout * 1000);
+
+        this._socket.write(outgoingMessage.toBuffer());
+    }
+
+    _process(incomingBuffer) {
+        try {
+            this._buffer = Buffer.concat([this._buffer, incomingBuffer]);
+            let {consumed, message:incomingMessage} = Message.parse(this._buffer);
+            if (consumed !== 0) {
+                this._socket.end();
+                this._isDataComplete = true;
+                this._buffer = this._buffer.slice(consumed);
+
+                if (incomingMessage.sign !== Message.SIGN_DATA) {
+                    this._callback.failure(`message sign wrong`);
+                }
+                this._callback.success(incomingMessage.payload);
+            }
+        }
+        catch(error) {
+            this._socket.destroy(error);
+        }
+    }
 };

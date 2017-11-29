@@ -36,8 +36,8 @@ module.exports = class {
 		}, 25 * 1000);
 	}
 
-	async request(request) {
-        let outgoingMessage = new Message(Message.SIGN_DATA, Buffer.from(request));
+	async request(payload) {
+        let outgoingMessage = new Message(Message.SIGN_DATA, payload);
 
         return await this._send(outgoingMessage);
     }
@@ -130,11 +130,10 @@ module.exports = class {
 				this._buffer = this._buffer.slice(consumed);
 
 				if (incomingMessage.sign === Message.SIGN_DATA) {
-
-                    let callback = this._pendings.get(incomingMessage.uuid);
+					let callback = this._pendings.get(incomingMessage.uuid);
                     if (callback !== undefined) {
                         this._pendings.delete(incomingMessage.uuid);
-                        callback.success(incomingMessage.payload.toString('utf8'));
+                        callback.success(incomingMessage.payload);
                     }
 				}
 			}

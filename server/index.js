@@ -78,12 +78,14 @@ module.exports = class {
 		process.exit(0);
 	}
 
-	send(socket, outgoingMessage) {
-		try {
+	send(socket, request) {
+        let outgoingMessage = new Message(Message.SIGN_DATA, request.data, request.uuid);
+
+        try {
 			socket.write(outgoingMessage.toBuffer());
 		}
 		catch(err) {
-			socket.destroy(error);
+			socket.destroy(err);
 		}
 	}
 
@@ -101,8 +103,7 @@ module.exports = class {
 		socket.on('close', _ => {
 			this._socketMap.delete(socket);
 			if (typeof this.onClosed === 'function') {
-				let a = socket;
-				this.onClosed(a);
+				this.onClosed(socket);
 			}
 		});
 		this._socketMap.set(socket, this._now);
@@ -123,7 +124,10 @@ module.exports = class {
 
 				if (incomingMessage.sign === Message.SIGN_DATA) {
 					if (typeof this.onMessage === 'function') {
-						this.onMessage(socket, incomingMessage);
+						this.onMessage(socket, {
+                            data: incomingMessage.payload,
+                            uuid: incomingMessage.uuid
+                        });
 					}
 				}
 			}
